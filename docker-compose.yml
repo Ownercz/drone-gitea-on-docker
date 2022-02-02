@@ -1,30 +1,47 @@
 version: '3.6'
 
-services:
+networks:
   gitea:
+    name: gitea
+    external: false
+
+services:
+  server:
+    image: gitea/gitea:1.15.10
     container_name: gitea
-    image: gitea/gitea:${GITEA_VERSION:-1.10.6}
-    restart: unless-stopped
     environment:
-      # https://docs.gitea.io/en-us/install-with-docker/#environments-variables
-      - APP_NAME="Gitea"
       - USER_UID=1000
       - USER_GID=1000
-      - RUN_MODE=prod
-      - DOMAIN=${IP_ADDRESS}
-      - SSH_DOMAIN=${IP_ADDRESS}
-      - HTTP_PORT=3000
-      - ROOT_URL=http://${IP_ADDRESS}:3000
-      - SSH_PORT=222
-      - SSH_LISTEN_PORT=22
-      - DB_TYPE=sqlite3
+      - GITEA__database__DB_TYPE=mysql
+      - GITEA__database__HOST=mariadb:3306
+      - GITEA__database__NAME=gitea
+      - GITEA__database__USER=gitea
+      - GITEA__database__PASSWD=gitea
+    restart: always
+    networks:
+      - gitea
+    volumes:
+      - /opt/data/gitea:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
     ports:
       - "3000:3000"
       - "222:22"
-    networks:
-      - cicd_net
-    volumes:
-      - ./gitea:/data
+    depends_on:
+      - mariadb
+
+  mariadb:
+     image: mariadb:10.7
+     restart: always
+     environment:
+       - MYSQL_ROOT_PASSWORD=gitea
+       - MYSQL_USER=gitea
+       - MYSQL_PASSWORD=gitea
+       - MYSQL_DATABASE=gitea
+     networks:
+       - gitea
+     volumes:
+       - /opt/data/gitea-mysql:/var/lib/mysql
 
   drone:
     container_name: drone
@@ -49,10 +66,10 @@ services:
       - "3001:80"
       - "9001:9000"
     networks:
-      - cicd_net
+      - gitea
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./drone:/data
+      - /opt/data/drone:/data
 
   drone-runner:
     container_name: drone-runner
@@ -74,10 +91,8 @@ services:
     ports:
       - "3002:3000"
     networks:
-      - cicd_net
+      - gitea
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
-networks:
-  cicd_net:
-    name: cicd_net
+
